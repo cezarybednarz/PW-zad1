@@ -1,9 +1,11 @@
 package alternator;
 
+import com.sun.jdi.InternalException;
 import petrinet.PetriNet;
 import petrinet.Transition;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -14,6 +16,7 @@ public class Main {
         private PetriNet<String> current;
         private Collection<Transition<String>> transitions;
         private boolean interrupted;
+        private static final Random RANDOM = new Random();
 
         public Worker(PetriNet<String> current, Collection<Transition<String>> transitions) {
             this.current = current;
@@ -24,13 +27,16 @@ public class Main {
 
         @Override
         public void run() {
+            Thread t = Thread.currentThread();
             try {
                 while(!interrupted) {
+                    //System.out.println(current.reachable(transitions));
                     current.fire(transitions);
+                    System.out.println(t.getName() + ".");
+                    Thread.sleep(RANDOM.nextInt(10));
                 }
             } catch (InterruptedException e) {
                 interrupted = true;
-                Thread t = Thread.currentThread();
                 t.interrupt();
                 System.err.println(t.getName() + " przerwany");
             }
@@ -79,10 +85,10 @@ public class Main {
         KoutA.put("A", 1);
 
         // B
-        PinA.put("B", 1);
-        PinA.put("Sem", 1);
-        PoutA.put("Crit", 1);
-        PoutA.put("PB", 1);
+        PinB.put("B", 1);
+        PinB.put("Sem", 1);
+        PoutB.put("Crit", 1);
+        PoutB.put("PB", 1);
 
         KinB.put("Crit", 1);
         KinB.put("PB", 1);
@@ -144,6 +150,8 @@ public class Main {
 
         if(okNumberOfTokens) {
             System.out.println("Correct! there is max one token in critical section");
+        } else {
+            System.out.println("WRONG!\n");
         }
 
         // checking multi threading
@@ -159,7 +167,27 @@ public class Main {
         CThreadTran.add(PtranC);
         CThreadTran.add(KtranC);
 
-        Thread A = new Worker(petrinet, AThreadTran);
+        Thread A = new Thread(new Worker(petrinet, AThreadTran), "A");
+        Thread B = new Thread(new Worker(petrinet, BThreadTran), "B");
+        Thread C = new Thread(new Worker(petrinet, CThreadTran), "C");
+
+        A.start();
+        B.start();
+        C.start();
+        try {
+            A.join(30 * 1000);
+            B.join(30 * 1000);
+            C.join(30 * 1000);
+            if (C.isAlive()) C.interrupt();
+            if (A.isAlive()) A.interrupt();
+            if (B.isAlive()) B.interrupt();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.out.println("Main interrupted");
+        }
+
+
+
 
     }
 }
