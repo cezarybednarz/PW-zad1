@@ -110,52 +110,49 @@ public class PetriNet<T> {
     }
 
     public Transition<T> fire(Collection<Transition<T>> transitions) throws InterruptedException {
-        //Collections.shuffle(transitions);
 
         Optional<Transition<T>> enabledTransition;
-
-        try {
-            mutex.acquire();
-        } catch (InterruptedException e) {
-
-            e.printStackTrace();
-            throw e;
-
-        } finally {
-
-            enabledTransition = findEnabledTransition(transitions);
-
-            if(enabledTransition.isEmpty()) {
-
-                waitingThreadQueue.add(new WaitingThread<>(transitions));
-                mutex.release();
-
-                waitingThreadQueue.element().getMutex().acquire();
-                enabledTransition = findEnabledTransition(transitions);
-
-            }
-
-            fire(current, enabledTransition.get());
-        }
-
         Optional<WaitingThread<T>> enabledThread = Optional.empty();
 
-        for(WaitingThread<T> waitingThread : waitingThreadQueue) {
-            if(findEnabledTransition(waitingThread.getTransitions()).isPresent()) {
-                enabledThread = Optional.of(waitingThread);
-                break;
+        try {
+
+            mutex.acquire();
+
+            try {
+                enabledTransition = findEnabledTransition(transitions);
+
+                if (enabledTransition.isEmpty()) {
+
+                    waitingThreadQueue.add(new WaitingThread<>(transitions));
+                    mutex.release();
+
+                    waitingThreadQueue.element().getMutex().acquire();
+
+                    enabledTransition = findEnabledTransition(transitions);
+                }
+
+                enabledTransition.ifPresent(tTransition -> fire(current, tTransition));
+
+                for (WaitingThread<T> waitingThread : waitingThreadQueue) {
+                    if (findEnabledTransition(waitingThread.getTransitions()).isPresent()) {
+                        enabledThread = Optional.of(waitingThread);
+                        waitingThreadQueue.remove(waitingThread);
+                        break;
+                    }
+                }
+            } finally {
+                if (enabledThread.isPresent()) {
+                    enabledThread.get().getMutex().release();
+                } else {
+                    mutex.release();
+                }
             }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            throw e;
         }
 
-        if(enabledThread.isPresent()) {
-            enabledThread.get().getMutex().release();
-        }
-        else {
-            mutex.release();
-        }
-
-        return enabledTransition.get();
+        return enabledTransition.orElse(null);
     }
-
 
 }
